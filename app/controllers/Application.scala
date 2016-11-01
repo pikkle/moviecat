@@ -27,31 +27,30 @@ class Application @Inject()(ws: WSClient, movie: Movie)(implicit ec: ExecutionCo
 
 	def index(path: String) = Action {
 		val browser = JsoupBrowser()
-		val doc = browser.get("http://google.com/movies?near=Lausanne")
-		val element = doc.body.select("div.movie_results").head
+		val doc = browser.get(s"http://google.com/movies?near=$path")
+		val element = doc.body.select("div.movie_results")
+		if (element.isEmpty) Ok(JsArray(Nil)) else {
+			val cinemas = element.head.select("div.theater").map(c => {
+				Json.obj(
+					"name" -> (c >> text("h2")),
+					"address" -> (c >> text(".desc .info")),
+					"movies" -> (c >> elementList(".movie")).map(f => {
+						val name = f >> text(".name")
+						Json.obj(
+							"name" -> name,
+							"poster" -> movie.getPoster(name),
+							"trailer" -> movie.getTrailer(name),
+							"imdb" -> movie.getIMDBUrl(name),
+							//"genres" -> movie.getGenres(name),
+							"info" -> (f >> text(".info")),
+							"times" -> (f >> elementList(".times span")).map(t => t.text.replaceAll("[^0-9:]", "")).filter(_.nonEmpty)
+						)
+					})
+				)
+			})
+			Ok(JsArray(cinemas.toSeq))
+		}
 
-		val cinemas = element.select("div.theater").map(c => {
-			Json.obj(
-				"name" -> (c >> text("h2")),
-				"address" -> (c >> text(".desc .info")),
-				"movies" -> (c >> elementList(".movie")).map(f => {
-					val name = f >> text(".name")
-					Json.obj(
-						"name" -> name,
-						"poster" -> movie.getPoster(name),
-						"trailer" -> movie.getTrailer(name),
-						"imdb" -> movie.getIMDBUrl(name),
-						//"genres" -> movie.getGenres(name),
-						"info" -> (f >> text(".info")),
-						"times" -> (f >> elementList(".times span")).map(t => t.text.replaceAll("[^0-9:]", "")).filter(_.nonEmpty)
-					)
-				})
-			)
-		})
-
-
-
-		Ok(JsArray(cinemas.toSeq))
 	}
 
 
