@@ -43,15 +43,17 @@ class Movie @Inject()(cache: CacheApi, ws: WSClient, conf: Configuration)(implic
 
 
 
-	def getTrailer(name: String) : Future[String] = cached(s"trailer/$name") {
-		val transport = new NetHttpTransport()
-		val factory = new JacksonFactory()
-		val httpRequestInit = new HttpRequestInitializer {
-			override def initialize(re: HttpRequest ) =  { }
-		}
-		val service = new YouTube.Builder(transport, factory, httpRequestInit).setApplicationName("test").setYouTubeRequestInitializer(new YouTubeRequestInitializer(youtubeKey)).build()
-		val video = service.search().list("snippet").setQ(s"$name - Trailer").execute().getItems.get(0)
-		Future(s"https://www.youtube.com/watch?v=${video.getId.getVideoId}")
+	def getTrailer(name: String) : Future[Option[String]] = cached(s"trailer/$name") {
+		Future {
+			val transport = new NetHttpTransport()
+			val factory = new JacksonFactory()
+			val httpRequestInit = new HttpRequestInitializer {
+				override def initialize(re: HttpRequest ) =  { }
+			}
+			val service = new YouTube.Builder(transport, factory, httpRequestInit).setApplicationName("test").setYouTubeRequestInitializer(new YouTubeRequestInitializer(youtubeKey)).build()
+			val video = service.search().list("snippet").setQ(s"$name - Trailer").execute().getItems.get(0)
+			s"https://www.youtube.com/watch?v=${video.getId.getVideoId}"
+		}.safe
 	}
 
 	def getPoster(name: String) : Future[Option[String]] = {
