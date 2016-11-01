@@ -59,14 +59,15 @@ class Movie @Inject()(cache: CacheApi, ws: WSClient, conf: Configuration)(implic
 	def getPoster(name: String) : Future[Option[String]] = {
 		findTMDBId(name).flatMap(getInfo).map(info => "https://image.tmdb.org/t/p/w500" + (info \ "poster_path").as[String]).safe
 	}
-/*
-	def getGenres(name: String) : Future[JsValue] = cached(s"genres/$name") {
+
+	/*
+	def getGenres(name: String) : Future[Option[String]] = cached(s"genres/$name") {
 		findTMDBId(name).flatMap(getInfo).map(info => (info \ "genres").as[String]).safe
 	}
+	*/
 
-	def getIMDBUrl(name: String) : Future[JsValue] = cached(s"imdbid/$name") {
-		findTMDBId(name).flatMap(getInfo).map(info => (info \ "imdb_id"))
+	def getIMDBUrl(name: String) : Future[Option[String]] = cached(s"imdbid/$name") {
+		findTMDBId(name).flatMap(getInfo).map(info => "http://www.imdb.com/title/" + (info \ "imdb_id").as[String]).safe
 	}
 
-*/
 }
