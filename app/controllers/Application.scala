@@ -41,8 +41,8 @@ class Application @Inject()(ws: WSClient, movie: Movie)(implicit ec: ExecutionCo
 							"poster" -> movie.getPoster(name),
 							"trailer" -> movie.getTrailer(name),
 							"imdb" -> movie.getIMDBUrl(name),
-							//"genres" -> movie.getGenres(name),
-							"info" -> (f >> text(".info")),
+							"duration" -> movie.getDuration(name),
+							"genres" -> movie.getGenres(name),
 							"times" -> (f >> elementList(".times span")).map(t => t.text.replaceAll("[^0-9:]", "")).filter(_.nonEmpty)
 						)
 					})

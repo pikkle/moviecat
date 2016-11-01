@@ -7,7 +7,7 @@ import com.google.api.services.youtube.{YouTube, YouTubeRequestInitializer}
 import com.google.inject.{Inject, Singleton}
 import play.api.Configuration
 import play.api.cache.CacheApi
-import play.api.libs.json.JsValue
+import play.api.libs.json.{JsObject, JsValue, Reads}
 import play.api.libs.ws.{WSClient, WSResponse}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -23,7 +23,7 @@ class Movie @Inject()(cache: CacheApi, ws: WSClient, conf: Configuration)(implic
 		def safe: Future[Option[A]] = f.map(Option.apply).recover { case _ => None }
 	}
 
-	def cached[A](key: String)(action: => Future[A]) : Future[A] = cache.getOrElse(key, 5.minutes) {
+	def cached[A](key: String)(action: => Future[A]) : Future[A] = cache.getOrElse(key, 24.hours) {
 		action.andThen{
 			case Failure(e) => cache.remove(key)
 		}
@@ -41,7 +41,9 @@ class Movie @Inject()(cache: CacheApi, ws: WSClient, conf: Configuration)(implic
 		req(s"/movie/$id") { r  => r.json }
 	}
 
+	def getInfo(title: String) : Future[JsValue] = findTMDBId(title).flatMap(getInfo)
 
+	def getInfo[A:Reads](title: String, field: String) : Future[A] = (getInfo(title).map(f => (f \ field).as[A]))
 
 	def getTrailer(name: String) : Future[Option[String]] = cached(s"trailer/$name") {
 		Future {
@@ -56,18 +58,22 @@ class Movie @Inject()(cache: CacheApi, ws: WSClient, conf: Configuration)(implic
 		}.safe
 	}
 
-	def getPoster(name: String) : Future[Option[String]] = {
-		findTMDBId(name).flatMap(getInfo).map(info => "https://image.tmdb.org/t/p/w500" + (info \ "poster_path").as[String]).safe
-	}
 
-	/*
-	def getGenres(name: String) : Future[Option[String]] = cached(s"genres/$name") {
-		findTMDBId(name).flatMap(getInfo).map(info => (info \ "genres").as[String]).safe
+
+	def getPoster(name: String) : Future[Option[String]] = {
+		getInfo[String](name, "poster_path").map("https://image.tmdb.org/t/p/w500" + _).safe
 	}
-	*/
 
 	def getIMDBUrl(name: String) : Future[Option[String]] = cached(s"imdbid/$name") {
-		findTMDBId(name).flatMap(getInfo).map(info => "http://www.imdb.com/title/" + (info \ "imdb_id").as[String]).safe
+		getInfo[String](name, "imdb_id").map("http://www.imdb.com/title/" + _).safe
+	}
+
+	def getDuration(name: String) : Future[Option[Int]] = cached(s"runtime/$name") {
+		getInfo[Int](name, "runtime").safe
+	}
+
+	def getGenres(name: String) : Future[Option[String]] = {
+		getInfo[Seq[JsObject]](name, "genres").map(_.map(o => (o \ "name").as[String]).mkString(", ")).safe
 	}
 
 }
