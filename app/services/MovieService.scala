@@ -1,49 +1,62 @@
 package services
 
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer}
-import com.google.api.client.http.javanet.NetHttpTransport
-import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.youtube.{YouTube, YouTubeRequestInitializer}
 import com.google.inject.{Inject, Singleton}
+import models.Movie
 import play.api.Configuration
 import play.api.cache.CacheApi
 import play.api.libs.json.{JsObject, JsValue, Reads}
 import play.api.libs.ws.{WSClient, WSResponse}
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
-import scala.util.Failure
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 
 @Singleton
-class Movie @Inject()(cache: CacheApi, ws: WSClient, conf: Configuration)(implicit ec: ExecutionContext) {
+class MovieService @Inject()(cache: CacheApi, conf: Configuration)(implicit ec: ExecutionContext, ws: WSClient) {
 	val tmdbKey: String = conf.getString("tmdb.key").get
 	val youtubeKey: String = conf.getString("youtube.key").get
+
+	def getMovie(title: String): Option[Movie] = cached(s"movies/$title") {
+		Movie(findTMDBId(title))
+	}
+
+	def getInfo(id: Int): Future[JsValue] = callTMDB(s"/movie/$id") { r => r.json }
+
+	def getVideos(id: Int): Future[JsValue] = callTMDB(s"/movie/$id/videos") { r => r.json }
+
+	private def findTMDBId(title: String): Future[Int] = cached(s"ids/$title", Duration.Inf){
+		callTMDB(s"/search/movie?query=$title") {
+			r => ((r.json \ "results") (0) \ "id").as[Int]
+		}
+	}
+
+	private def callTMDB[T](path: String)(action: WSResponse => T): Future[T] = {
+		val op = if (path.contains("?")) "&" else "?"
+		ws.url(s"https://api.themoviedb.org/3$path${op}api_key=$tmdbKey").get.map(action)
+	}
+
+	def cached[A](key: String, time: Duration = 24.hours)(action: => Future[A]): Future[A] = cache.getOrElse(key, time) {
+		action.andThen {
+			case Failure(e) => cache.remove(key)
+		}
+	}
+
+	/*
 
 	implicit class SafeFuture[A](private val f: Future[A]) {
 		def safe: Future[Option[A]] = f.map(Option.apply).recover { case _ => None }
 	}
 
-	def cached[A](key: String)(action: => Future[A]) : Future[A] = cache.getOrElse(key, 24.hours) {
-		action.andThen{
-			case Failure(e) => cache.remove(key)
-		}
+
+	def getInfo(name: String) : Future[JsValue] = findTMDBId(name).flatMap(getInfo)
+
+	def getTrailer2(name: String) : Future[Option[String]] = cached(s"trailers/$name") {
+		findTMDBId(name).flatMap(id => Future {
+			""
+		}.safe)
 	}
-
-	def req[T](path: String)(action: WSResponse => T) = {
-		ws.url(s"https://api.themoviedb.org/3$path${if (path.contains("?")) "&" else "?"}api_key=$tmdbKey").get.map(action)
-	}
-
-	def findTMDBId(name: String) : Future[Int] = cached(s"id/$name") {
-		req(s"/search/movie?query=$name") { r => ((r.json \ "results")(0) \ "id").as[Int] }
-	}
-
-	def getInfo(id: Int) : Future[JsValue] = cached(s"info/$id") {
-		req(s"/movie/$id") { r  => r.json }
-	}
-
-	def getInfo(title: String) : Future[JsValue] = findTMDBId(title).flatMap(getInfo)
-
-	def getInfo[A:Reads](title: String, field: String) : Future[A] = (getInfo(title).map(f => (f \ field).as[A]))
 
 	def getTrailer(name: String) : Future[Option[String]] = cached(s"trailer/$name") {
 		Future {
@@ -75,5 +88,5 @@ class Movie @Inject()(cache: CacheApi, ws: WSClient, conf: Configuration)(implic
 	def getGenres(name: String) : Future[Option[String]] = {
 		getInfo[Seq[JsObject]](name, "genres").map(_.map(o => (o \ "name").as[String]).mkString(", ")).safe
 	}
-
+*/
 }
